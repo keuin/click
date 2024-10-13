@@ -37,6 +37,7 @@ type SelectBuilder struct {
 	hasLimit bool
 	offset   int
 	format   Format
+	pretty   bool
 }
 
 func (s *SelectBuilder) Select(values ...Expression) *SelectBuilder {
@@ -91,75 +92,79 @@ func (s *SelectBuilder) Format(f Format) *SelectBuilder {
 }
 
 func (s *SelectBuilder) BuildString() (string, error) {
-	var sb strings.Builder
+	var p sqlPrinter
 	if len(s.selects) == 0 {
 		return "", errors.New("no selects")
 	}
-	sb.WriteString("SELECT ")
+	p.BeginClause("SELECT", s.pretty)
 	for i := range s.selects {
-		if i != 0 {
-			sb.WriteString(", ")
-		}
+		var v string
 		if expr, ok := s.selects[i].(SelectExpression); ok {
-			sb.WriteString(expr.SelectExpression())
+			v = expr.SelectExpression()
 		} else {
-			sb.WriteString(s.selects[i].Expression())
+			v = s.selects[i].Expression()
 		}
+		p.AddClauseArgument(v, s.pretty, i == len(s.selects)-1)
 	}
 	if s.from != "" {
-		sb.WriteString(" FROM ")
-		sb.WriteString(s.from)
+		p.BeginClause("FROM", s.pretty)
+		p.AddClauseArgument(s.from, s.pretty, true)
 	}
 	if s.sample > 0 {
 		if s.from == "" {
 			return "", errors.New("SAMPLE is present while FROM is absent")
 		}
-		sb.WriteString(" SAMPLE ")
-		sb.WriteString(strconv.FormatFloat(s.sample, 'f', -1, 64))
+		p.BeginClause("SAMPLE", s.pretty)
+		p.AddClauseArgument(strconv.FormatFloat(s.sample, 'f', -1, 64), s.pretty, true)
 	}
 	if s.where != nil {
-		sb.WriteString(" WHERE ")
-		sb.WriteString(s.where.Expression())
+		p.BeginClause("WHERE", s.pretty)
+		p.AddClauseArgument(s.where.Expression(), s.pretty, true)
 	}
 	if len(s.groupBy) > 0 {
-		sb.WriteString(" GROUP BY ")
+		p.BeginClause("GROUP BY", s.pretty)
 		for i := range s.groupBy {
-			if i != 0 {
-				sb.WriteString(", ")
-			}
-			sb.WriteString(s.groupBy[i].Expression())
+			p.AddClauseArgument(s.groupBy[i].Expression(), s.pretty, i == len(s.groupBy)-1)
 		}
 	}
 	if s.having != nil {
-		sb.WriteString(" HAVING ")
-		sb.WriteString(s.having.Expression())
+		p.BeginClause("HAVING", s.pretty)
+		p.AddClauseArgument(s.having.Expression(), s.pretty, true)
 	}
 	if len(s.orderBy) > 0 {
-		sb.WriteString(" ORDER BY ")
+		p.BeginClause("ORDER BY", s.pretty)
 		for i := range s.orderBy {
-			if i != 0 {
-				sb.WriteString(", ")
-			}
+			var v string
 			if expr, ok := s.orderBy[i].(OrderByExpression); ok {
-				sb.WriteString(expr.OrderByExpression())
+				v = expr.OrderByExpression()
 			} else {
-				sb.WriteString(s.orderBy[i].Expression())
+				v = s.orderBy[i].Expression()
 			}
+			p.AddClauseArgument(v, s.pretty, i == len(s.orderBy)-1)
 		}
 	}
 	if s.hasLimit {
-		sb.WriteString(" LIMIT ")
-		sb.WriteString(strconv.Itoa(s.limit))
+		p.BeginClause("LIMIT", s.pretty)
+		p.AddClauseArgument(strconv.Itoa(s.limit), s.pretty, true)
 	}
 	if s.offset > 0 {
-		sb.WriteString(" OFFSET ")
-		sb.WriteString(strconv.Itoa(s.offset))
+		p.BeginClause("OFFSET", s.pretty)
+		p.AddClauseArgument(strconv.Itoa(s.offset), s.pretty, true)
 	}
 	if s.format != "" {
-		sb.WriteString(" FORMAT ")
-		sb.WriteString(string(s.format))
+		p.BeginClause("FORMAT", s.pretty)
+		p.AddClauseArgument(string(s.format), s.pretty, true)
 	}
-	return sb.String(), nil
+	return p.String(), nil
+}
+
+func (s *SelectBuilder) PrettyPrint(b ...bool) *SelectBuilder {
+	if len(b) > 0 {
+		s.pretty = b[0]
+	} else {
+		s.pretty = true
+	}
+	return s
 }
 
 func (s *SelectBuilder) Build() (SelectQuery, error) {
@@ -168,6 +173,41 @@ func (s *SelectBuilder) Build() (SelectQuery, error) {
 		return nil, err
 	}
 	return (*sealedSelect)(s), nil
+}
+
+type sqlPrinter struct {
+	sb strings.Builder
+}
+
+func (p *sqlPrinter) BeginClause(name string, newline bool) {
+	if newline {
+		p.sb.WriteString(name)
+		p.sb.WriteByte('\n')
+	} else {
+		p.sb.WriteByte(' ')
+		p.sb.WriteString(name)
+		p.sb.WriteByte(' ')
+	}
+}
+
+func (p *sqlPrinter) AddClauseArgument(v string, newline, lastElem bool) {
+	if newline {
+		p.sb.WriteString("\t")
+		p.sb.WriteString(v)
+		if !lastElem {
+			p.sb.WriteString(",")
+		}
+		p.sb.WriteString("\n")
+	} else {
+		p.sb.WriteString(v)
+		if !lastElem {
+			p.sb.WriteString(", ")
+		}
+	}
+}
+
+func (p *sqlPrinter) String() string {
+	return strings.TrimSpace(p.sb.String())
 }
 
 // sealedSelect is complete, valid and unmodifiable SelectBuilder.

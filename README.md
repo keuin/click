@@ -36,19 +36,19 @@ import (
 )
 
 const (
-	Date click.TableColumn = "date"
-	User click.TableColumn = "user"
+	Date click.Column = "date"
+	User click.Column = "user"
 )
 
 func main() {
 	sumVisitCount := click.Alias("visit_count")
-	q := click.
+	sql, _ := click.
 		Select(Date, User, click.As(click.Count(), sumVisitCount)).
 		From("user_accesses").
 		GroupBy(Date, User).
 		OrderBy(sumVisitCount).
-		Limit(10)
-	fmt.Println(q.String())
+		Limit(10).PrettyPrint().BuildString()
+	fmt.Println(sql)
 }
 ```
 
@@ -57,11 +57,12 @@ Prints:
 ```clickhouse
 SELECT date,
        user,
-       count() as visit_count
+       count() AS visit_count
 FROM user_accesses
-GROUP BY date, user
+GROUP BY date,
+         user
 ORDER BY visit_count
-LIMIT 10;
+LIMIT 10
 ```
 
 ### 2.2 nested query

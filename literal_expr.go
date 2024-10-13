@@ -45,6 +45,16 @@ func LiteralExpressions[T any](v []T, quoteString bool) (ret []Expression) {
 	return ret
 }
 
+type alias string
+
+func (a alias) Expression() string {
+	return string(a)
+}
+
+func Alias(s string) Expression {
+	return alias(s)
+}
+
 type literalExpr[T any] struct {
 	val         T
 	quoteString bool
