@@ -2,6 +2,7 @@ package click
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 )
@@ -19,6 +20,7 @@ func Select(values ...Expression) *SelectBuilder {
 }
 
 type SelectQuery interface {
+	FromExpression
 	String() string
 }
 
@@ -27,7 +29,7 @@ type SelectQuery interface {
 // It's recommended to use Select as a shortcut.
 type SelectBuilder struct {
 	selects  []Expression // Expression | SelectExpression
-	from     string
+	from     FromExpression
 	where    Expression
 	groupBy  []Expression
 	orderBy  []Expression // Expression | OrderByExpression
@@ -37,7 +39,29 @@ type SelectBuilder struct {
 	hasLimit bool
 	offset   int
 	format   Format
-	pretty   bool
+	style    RenderStyle
+	styleSet bool
+}
+
+func (s *SelectBuilder) FromExpression(style RenderStyle) (string, error) {
+	style.IndentLevel++
+	fromExpr, err := s.buildString(style)
+	if err != nil {
+		return "", err
+	}
+	var sb strings.Builder
+	sb.WriteString("(\n")
+	for i := 0; i < style.IndentLevel; i++ {
+		sb.WriteString(style.Indent)
+	}
+	sb.WriteString(fromExpr)
+	sb.WriteString("\n")
+	style.IndentLevel--
+	for i := 0; i < style.IndentLevel; i++ {
+		sb.WriteString(style.Indent)
+	}
+	sb.WriteString(")")
+	return sb.String(), nil
 }
 
 func (s *SelectBuilder) Select(values ...Expression) *SelectBuilder {
@@ -45,12 +69,12 @@ func (s *SelectBuilder) Select(values ...Expression) *SelectBuilder {
 	return s
 }
 
-func (s *SelectBuilder) From(table string) *SelectBuilder {
+func (s *SelectBuilder) From(table FromExpression) *SelectBuilder {
 	s.from = table
 	return s
 }
 
-func (s *SelectBuilder) Sampling(v float64) *SelectBuilder {
+func (s *SelectBuilder) Sample(v float64) *SelectBuilder {
 	s.sample = v
 	return s
 }
@@ -92,11 +116,26 @@ func (s *SelectBuilder) Format(f Format) *SelectBuilder {
 }
 
 func (s *SelectBuilder) BuildString() (string, error) {
-	var p sqlPrinter
+	style := defaultStyle
+	if s.styleSet {
+		style = s.style
+	}
+	return s.buildString(style)
+}
+
+// buildString ignores style settings in SelectBuilder itself, using the RenderStyle in argument.
+// This is used in nested query rendering. Since RenderStyle is only needed when rendering the entire SELECT expression,
+// other Expression interfaces (like Expression, SelectExpression, OrderByExpression) does not accept RenderStyle as argument.
+// buildString is a simple replacement for a common and public interface which accepts RenderStyle.
+// This may be exposed in the future, or move RenderStyle in sqlPrinter, and pass sqlPrinter in the entire process.
+func (s *SelectBuilder) buildString(style RenderStyle) (string, error) {
+	p := sqlPrinter{
+		Style: style,
+	}
 	if len(s.selects) == 0 {
 		return "", errors.New("no selects")
 	}
-	p.BeginClause("SELECT", s.pretty)
+	p.BeginClause("SELECT")
 	for i := range s.selects {
 		var v string
 		if expr, ok := s.selects[i].(SelectExpression); ok {
@@ -104,35 +143,40 @@ func (s *SelectBuilder) BuildString() (string, error) {
 		} else {
 			v = s.selects[i].Expression()
 		}
-		p.AddClauseArgument(v, s.pretty, i == len(s.selects)-1)
+		p.AddClauseArgument(v, i == len(s.selects)-1)
 	}
-	if s.from != "" {
-		p.BeginClause("FROM", s.pretty)
-		p.AddClauseArgument(s.from, s.pretty, true)
+	if s.from != nil {
+		p.BeginClause("FROM")
+		fromExpr, err := s.from.FromExpression(style)
+		if err != nil {
+			return "", fmt.Errorf("build FROM clause: %w", err)
+		}
+		_, isTable := s.from.(Table)
+		p.AddClauseArgumentPrefix(fromExpr, true, isTable)
 	}
 	if s.sample > 0 {
-		if s.from == "" {
+		if s.from == nil {
 			return "", errors.New("SAMPLE is present while FROM is absent")
 		}
-		p.BeginClause("SAMPLE", s.pretty)
-		p.AddClauseArgument(strconv.FormatFloat(s.sample, 'f', -1, 64), s.pretty, true)
+		p.BeginClause("SAMPLE")
+		p.AddClauseArgument(strconv.FormatFloat(s.sample, 'f', -1, 64), true)
 	}
 	if s.where != nil {
-		p.BeginClause("WHERE", s.pretty)
-		p.AddClauseArgument(s.where.Expression(), s.pretty, true)
+		p.BeginClause("WHERE")
+		p.AddClauseArgument(s.where.Expression(), true)
 	}
 	if len(s.groupBy) > 0 {
-		p.BeginClause("GROUP BY", s.pretty)
+		p.BeginClause("GROUP BY")
 		for i := range s.groupBy {
-			p.AddClauseArgument(s.groupBy[i].Expression(), s.pretty, i == len(s.groupBy)-1)
+			p.AddClauseArgument(s.groupBy[i].Expression(), i == len(s.groupBy)-1)
 		}
 	}
 	if s.having != nil {
-		p.BeginClause("HAVING", s.pretty)
-		p.AddClauseArgument(s.having.Expression(), s.pretty, true)
+		p.BeginClause("HAVING")
+		p.AddClauseArgument(s.having.Expression(), true)
 	}
 	if len(s.orderBy) > 0 {
-		p.BeginClause("ORDER BY", s.pretty)
+		p.BeginClause("ORDER BY")
 		for i := range s.orderBy {
 			var v string
 			if expr, ok := s.orderBy[i].(OrderByExpression); ok {
@@ -140,30 +184,31 @@ func (s *SelectBuilder) BuildString() (string, error) {
 			} else {
 				v = s.orderBy[i].Expression()
 			}
-			p.AddClauseArgument(v, s.pretty, i == len(s.orderBy)-1)
+			p.AddClauseArgument(v, i == len(s.orderBy)-1)
 		}
 	}
 	if s.hasLimit {
-		p.BeginClause("LIMIT", s.pretty)
-		p.AddClauseArgument(strconv.Itoa(s.limit), s.pretty, true)
+		p.BeginClause("LIMIT")
+		p.AddClauseArgument(strconv.Itoa(s.limit), true)
 	}
 	if s.offset > 0 {
-		p.BeginClause("OFFSET", s.pretty)
-		p.AddClauseArgument(strconv.Itoa(s.offset), s.pretty, true)
+		p.BeginClause("OFFSET")
+		p.AddClauseArgument(strconv.Itoa(s.offset), true)
 	}
 	if s.format != "" {
-		p.BeginClause("FORMAT", s.pretty)
-		p.AddClauseArgument(string(s.format), s.pretty, true)
+		p.BeginClause("FORMAT")
+		p.AddClauseArgument(string(s.format), true)
 	}
 	return p.String(), nil
 }
 
 func (s *SelectBuilder) PrettyPrint(b ...bool) *SelectBuilder {
-	if len(b) > 0 {
-		s.pretty = b[0]
+	if len(b) == 0 || b[0] {
+		s.style = prettyStyle
 	} else {
-		s.pretty = true
+		s.style = defaultStyle
 	}
+	s.styleSet = true
 	return s
 }
 
@@ -176,34 +221,35 @@ func (s *SelectBuilder) Build() (SelectQuery, error) {
 }
 
 type sqlPrinter struct {
-	sb strings.Builder
+	sb    strings.Builder
+	Style RenderStyle
 }
 
-func (p *sqlPrinter) BeginClause(name string, newline bool) {
-	if newline {
-		p.sb.WriteString(name)
-		p.sb.WriteByte('\n')
-	} else {
-		p.sb.WriteByte(' ')
-		p.sb.WriteString(name)
-		p.sb.WriteByte(' ')
+func (p *sqlPrinter) BeginClause(name string) {
+	for i := 0; i < p.Style.IndentLevel; i++ {
+		p.sb.WriteString(p.Style.Indent)
 	}
+	p.sb.WriteString(p.Style.ClauseNamePrefix)
+	p.sb.WriteString(name)
+	p.sb.WriteString(p.Style.ClauseNameSuffix)
 }
 
-func (p *sqlPrinter) AddClauseArgument(v string, newline, lastElem bool) {
-	if newline {
-		p.sb.WriteString("\t")
-		p.sb.WriteString(v)
-		if !lastElem {
-			p.sb.WriteString(",")
-		}
-		p.sb.WriteString("\n")
-	} else {
-		p.sb.WriteString(v)
-		if !lastElem {
-			p.sb.WriteString(", ")
-		}
+func (p *sqlPrinter) AddClauseArgument(v string, lastElem bool) {
+	p.AddClauseArgumentPrefix(v, lastElem, true)
+}
+
+func (p *sqlPrinter) AddClauseArgumentPrefix(v string, lastElem, prefix bool) {
+	for i := 0; i < p.Style.IndentLevel; i++ {
+		p.sb.WriteString(p.Style.Indent)
 	}
+	if prefix {
+		p.sb.WriteString(p.Style.ArgumentPrefix)
+	}
+	p.sb.WriteString(v)
+	if !lastElem {
+		p.sb.WriteString(p.Style.ArgumentDelimiter)
+	}
+	p.sb.WriteString(p.Style.ArgumentSuffix)
 }
 
 func (p *sqlPrinter) String() string {
@@ -213,7 +259,11 @@ func (p *sqlPrinter) String() string {
 // sealedSelect is complete, valid and unmodifiable SelectBuilder.
 type sealedSelect SelectBuilder
 
+func (s sealedSelect) FromExpression(style RenderStyle) (string, error) {
+	return (*SelectBuilder)(&s).FromExpression(style)
+}
+
 func (s sealedSelect) String() string {
-	str, _ := (*SelectBuilder)(&s).BuildString()
+	str := must((*SelectBuilder)(&s).BuildString())
 	return str
 }

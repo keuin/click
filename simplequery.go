@@ -13,7 +13,7 @@ type SimpleQuery struct {
 	EndTime             time.Time
 
 	Select  []Expression
-	From    string
+	From    string // From is table name
 	Where   Expression
 	GroupBy []Expression
 	OrderBy []Expression
@@ -31,7 +31,7 @@ func (q SimpleQuery) Build() (SelectQuery, error) {
 	if q.From == "" {
 		return nil, errors.New("no from")
 	}
-	b.From(q.From)
+	b.From(Table(q.From))
 	if q.Where != nil {
 		b.Where(q.Where)
 	}

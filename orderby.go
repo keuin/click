@@ -3,9 +3,8 @@ package click
 import "strings"
 
 // OrderByExpression is an Expression in ORDER BY clause.
-// Any Expression that can be selected must implement OrderByExpression,
-// defining how it will look like when being ordered by.
-// Symmetrically, any Expression cannot be ordered by MUST NOT implement OrderByExpression.
+// Any Expression that can be selected may implement OrderByExpression,
+// customizing how it will look like when being ordered by.
 type OrderByExpression interface {
 	Expression
 	OrderByExpression() string

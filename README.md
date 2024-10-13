@@ -15,16 +15,14 @@
     + `SimpleQuery`: non-nested query shortcut, build with struct
     + `Select()`: declarative, chained, freestyle builder
 2. `expression`: fundamental SQL expressions and operators
-    + expressions:
-    + operators:
+    + expressions: 
+    + operators: 
 3. `datasource`: datasource connector abstraction
     + `FromGoSQL()`: adaptor for ClickHouse connection from `sql` package
     + `Datasource`: interface where user can implement to use their own ClickHouse gateways, proixes...
 
 ## 2. examples
-
 ˇ
-
 ### 2.1 click 101
 
 ```go
@@ -44,7 +42,7 @@ func main() {
 	sumVisitCount := click.Alias("visit_count")
 	sql, _ := click.
 		Select(Date, User, click.As(click.Count(), sumVisitCount)).
-		From("user_accesses").
+		From(click.Table("user_accesses")).
 		GroupBy(Date, User).
 		OrderBy(sumVisitCount).
 		Limit(10).PrettyPrint().BuildString()
@@ -55,16 +53,83 @@ func main() {
 Prints:
 
 ```clickhouse
-SELECT date,
-       user,
-       count() AS visit_count
-FROM user_accesses
-GROUP BY date,
-         user
-ORDER BY visit_count
-LIMIT 10
+SELECT
+    date,
+    user,
+    count() AS visit_count
+FROM
+    user_accesses
+GROUP BY
+    date,
+    user
+ORDER BY
+    visit_count
+LIMIT
+    10
 ```
 
 ### 2.2 nested query
 
-(TODO)
+
+```go
+package main
+
+import (
+	"fmt"
+	. "github.com/keuin/click"
+)
+
+const (
+	Date  Column = "date"
+	Score Column = "score"
+	Tbl   Table  = "tbl"
+)
+
+func main() {
+	avgScore := As(Avg(Score), LiteralExpression("avg_score"))
+	sql, _ := Select(Count()).
+		From(
+			Select(avgScore).
+				From(Tbl).
+				Sample(0.1).
+				Where(And(
+					GreaterOrEqualThan(Date, LiteralExpressionQuoted("2024-01-01")),
+					LessThan(Date, LiteralExpressionQuoted("2024-02-01")),
+				)).
+				GroupBy(Date).
+				OrderBy(Date, Asc(Date), Desc(avgScore)).
+				Having(GreaterThan(avgScore, LiteralExpression(60))).
+				Limit(5).Offset(10),
+		).
+		PrettyPrint().BuildString()
+	fmt.Println(sql)
+}
+```
+
+```clickhouse
+SELECT
+	count()
+FROM
+(
+	SELECT
+		avg(score) AS avg_score
+	FROM
+		tbl
+	SAMPLE
+		0.1
+	WHERE
+		((date >= '2024-01-01') AND (date < '2024-02-01'))
+	GROUP BY
+		date
+    HAVING
+        (avg_score > 60)
+	ORDER BY
+		date,
+		date ASC,
+		avg_score DESC
+	LIMIT
+		5
+	OFFSET
+		10
+)
+```

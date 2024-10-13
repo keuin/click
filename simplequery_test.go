@@ -25,7 +25,7 @@ func TestSimpleQuery_BuildString(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s != "SELECT count(), toStartOfDay(ts) FROM tbl WHERE (1 AND (ts >= 1704038400) AND (ts < 1706716800)) GROUP BY b, toStartOfDay(ts) ORDER BY c, toStartOfDay(ts) HAVING d" {
+	if s != "SELECT count(), toStartOfDay(ts) FROM tbl WHERE (1 AND (ts >= 1704038400) AND (ts < 1706716800)) GROUP BY b, toStartOfDay(ts) HAVING d ORDER BY c, toStartOfDay(ts)" {
 		t.Fatal(s)
 	}
 }

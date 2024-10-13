@@ -26,3 +26,10 @@ func tryGetLength(v any) (int, bool) {
 		return 0, false
 	}
 }
+
+func must[T any](v T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return v
+}

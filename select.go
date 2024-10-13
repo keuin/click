@@ -5,9 +5,8 @@ import (
 )
 
 // SelectExpression is an expression in SELECT clause.
-// Any Expression that can be selected must implement SelectExpression,
-// defining how it will look like when being selected.
-// Symmetrically, any Expression cannot be selected MUST NOT implement SelectExpression.
+// Any Expression that can be selected may implement SelectExpression,
+// customizing how it will look like when being selected.
 type SelectExpression interface {
 	Expression
 	SelectExpression() string
