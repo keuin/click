@@ -34,6 +34,7 @@ func (f fnCall) Expression() string {
 
 func Sum(v Expression) Expression           { return Fn("sum", v) }
 func Avg(v Expression) Expression           { return Fn("avg", v) }
+func Count(v ...Expression) Expression      { return Fn("count", v...) }
 func CountIf(v Expression) Expression       { return Fn("countIf", v) }
 func If(cond, v1, v2 Expression) Expression { return Fn("if", cond, v1, v2) }
 func IsNotNull(v Expression) Expression     { return Fn("isNotNull", v) }

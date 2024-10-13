@@ -166,3 +166,36 @@ func TestIsNotNull(t *testing.T) {
 		})
 	}
 }
+
+func TestCount(t *testing.T) {
+	type args struct {
+		v []Expression
+	}
+	tests := []struct {
+		name string
+		args args
+		want string
+	}{
+		{
+			name: "count-simple",
+			args: args{
+				v: []Expression{LiteralExpression("a")},
+			},
+			want: "count(a)",
+		},
+		{
+			name: "count-empty",
+			args: args{
+				v: nil,
+			},
+			want: "count()",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := Count(tt.args.v...).Expression(); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Count() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
