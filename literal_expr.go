@@ -3,6 +3,7 @@ package click
 import (
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 )
 
@@ -68,6 +69,11 @@ func (e literalExpr[T]) Expression() string {
 			return "'" + clickhouseStringEscapeReplacer.Replace(s) + "'"
 		}
 		return s
+	}
+	if ts, ok := interface{}(e.val).(interface{ Unix() int64 }); ok {
+		// compatible with both time.Time and *time.Time
+		// ClickHouse DateTime has 1 second resolution, so Unix() is enough.
+		return strconv.FormatInt(ts.Unix(), 10)
 	}
 	return fmt.Sprint(e.val)
 }
