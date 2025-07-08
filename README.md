@@ -2,7 +2,6 @@
 
 [![Go Reference](https://pkg.go.dev/badge/image)](https://pkg.go.dev/github.com/keuin/click)
 [![Go Report](https://goreportcard.com/badge/github.com/keuin/click)](https://goreportcard.com/report/github.com/keuin/click)
-![Go Coverage](https://github.com/keuin/click/wiki/coverage.svg)
 
 ## 1. design overview
 
@@ -12,6 +11,8 @@
 - **easy to extend & interoperate with**:
     + good interoperability with existing popular ORM library (`github.com/huandu/go-sqlbuilder`)
     + directly generate final query SQL, easy to use outside the library
+- **well-tested**: test coverage ~87%
+    + ![test coverage](test_coverage.png)
 
 ## 2. features & modules
 
@@ -51,9 +52,7 @@ func main() {
 }
 ```
 
-Prints:
-
-```clickhouse
+```sql
 SELECT
     date,
     user,
@@ -107,7 +106,7 @@ func main() {
 }
 ```
 
-```clickhouse
+```sql
 SELECT
 	count()
 FROM
@@ -121,9 +120,9 @@ FROM
 	WHERE
 		((date >= '2024-01-01') AND (date < '2024-02-01'))
 	GROUP BY
-        date
-    HAVING
-        (avg_score > 60)
+		date
+	HAVING
+		(avg_score > 60)
 	ORDER BY
 		date,
 		date ASC,
