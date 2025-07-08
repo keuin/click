@@ -19,14 +19,11 @@
     + `SimpleQuery`: non-nested query shortcut, build with struct
     + `Select()`: declarative, chained, freestyle builder
 2. `expression`: fundamental SQL expressions and operators
-    + expressions: 
-    + operators: 
-3. `datasource`: datasource connector abstraction
-    + `FromGoSQL()`: adaptor for ClickHouse connection from `sql` package
-    + `Datasource`: interface where user can implement to use their own ClickHouse gateways, proixes...
+    + expressions & functions: `GreaterThan`, `LessThan`, `In`, `If`, ...
+    + operators: `And`, `Or`, `Concatenate`
 
 ## 2. examples
-ˇ
+
 ### 2.1 click 101
 
 ```go
@@ -124,7 +121,7 @@ FROM
 	WHERE
 		((date >= '2024-01-01') AND (date < '2024-02-01'))
 	GROUP BY
-		date
+        date
     HAVING
         (avg_score > 60)
 	ORDER BY
