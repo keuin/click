@@ -1,5 +1,9 @@
 # click: Golang ClickHouse query SQL builder
 
+[![Go Reference](https://pkg.go.dev/badge/image)](https://pkg.go.dev/github.com/keuin/click)
+[![Go Report](https://goreportcard.com/badge/github.com/keuin/click)](https://goreportcard.com/report/github.com/keuin/click)
+![Go Coverage](https://github.com/keuin/click/wiki/coverage.svg)
+
 ## 1. design overview
 
 - **declarative builder**: build ClickHouse SQL declaratively, in simple or advanced ways

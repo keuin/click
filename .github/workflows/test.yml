@@ -1,0 +1,91 @@
+name: test.yml
+on:
+  push:
+    branches: [ 'master' ]
+    paths:
+      - '**.go'
+      - '**.mod'
+      - '**.yml'
+  pull_request:
+    branches: [ 'master' ]
+    paths:
+      - '**.go'
+      - '**.mod'
+      - '**.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: stable }
+
+      - name: Format
+        run: gofmt -s -w . && git diff --exit-code
+        if: matrix.os != 'windows-latest'
+
+      - name: Tidy
+        run: go mod tidy && git diff --exit-code
+
+      - name: Download
+        run: go mod download
+
+      - name: Verify
+        run: go mod verify
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build
+        run: go build -v ./...
+
+      - name: Test
+        run: go test -v ./... -bench . -benchtime=1x
+
+      - name: Test BSD locks
+        run: go test -v -tags sqlite3_flock ./...
+        if: matrix.os != 'windows-latest'
+
+      - name: Test dot locks
+        run: go test -v -tags sqlite3_dotlk ./...
+        if: matrix.os != 'windows-latest'
+
+      - name: Test modules
+        shell: bash
+        run: |
+          go work init .
+          go work use -r embed gormlite
+          go test -v ./embed/bcw2/...
+
+      - name: Test GORM
+        shell: bash
+        run: gormlite/test.sh
+        if: matrix.os != 'windows-latest'
+
+      - name: Collect coverage
+        run: |
+          go get -tool github.com/dave/courtney@v0.4.4
+          go tool courtney
+        if: |
+          github.event_name == 'push' &&
+          matrix.os == 'ubuntu-latest'
+
+      - uses: ncruces/go-coverage-report@v0
+        with:
+          coverage-file: coverage.out
+          chart: true
+          amend: true
+        if: |
+          github.event_name == 'push' &&
+          matrix.os == 'ubuntu-latest'
